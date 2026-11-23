@@ -260,8 +260,13 @@ input:focus {
 
 /* ---------- Landing page ---------- */
 
-.landing .hero { text-align: center; padding: 24px 0 8px; }
+.landing .hero { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 40px; align-items: center; text-align: left; padding: 32px 0 16px; }
 .landing .hero h1 { font-size: 2rem; }
+.hero-text .hero-lead { margin-left: 0; margin-right: 0; }
+.hero-text .hero-cta { justify-content: flex-start; }
+.hero-signin { margin: 0; text-align: left; }
+.hero-signin h2 { margin-top: 0; font-size: 1.15rem; }
+.hero-signin .btn { width: 100%; }
 .hero-lead { font-size: 1.2rem; line-height: 1.4; margin: 0.4em auto 0.9em; max-width: 34em; }
 .hero-cta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0 8px; }
 .landing section { margin: 32px 0; }
@@ -272,6 +277,12 @@ input:focus {
 .faq h3 { font-size: 1rem; margin: 1em 0 0.25em; }
 .faq p { margin: 0.25em 0 0.75em; }
 .landing-footer { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 32px; text-align: center; }
+
+@media (max-width: 720px) {
+  .landing .hero { grid-template-columns: 1fr; text-align: center; padding: 24px 0 8px; }
+  .hero-text .hero-lead { margin-left: auto; margin-right: auto; }
+  .hero-text .hero-cta { justify-content: center; }
+}
 
 @media (max-width: 520px) {
   .steps { grid-template-columns: 1fr; }

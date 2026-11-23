@@ -36,13 +36,32 @@ page_head('GetPassAi — Free password vault your AI assistant can use without s
 
 <main class="wrap wide landing">
   <header class="hero">
-    <h1>🔐 GetPassAi</h1>
-    <p class="hero-lead">Free password vault your AI assistant can use without seeing your passwords.</p>
-    <p class="hero-cta">
-      <a class="btn primary" href="register.php">Create free account</a>
-      <a class="btn" href="#how-it-works">How it works</a>
-    </p>
-    <p class="muted">Free forever — no ads, no paywall, no email needed.</p>
+    <div class="hero-text">
+      <h1>🔐 GetPassAi</h1>
+      <p class="hero-lead">Free password vault your AI assistant can use without seeing your passwords.</p>
+      <p class="hero-cta">
+        <a class="btn primary" href="register.php">Create free account</a>
+        <a class="btn" href="#how-it-works">How it works</a>
+      </p>
+      <p class="muted">Free forever — no ads, no paywall, no email needed.</p>
+    </div>
+
+    <form id="login-form" class="card hero-signin" autocomplete="on">
+      <h2>Sign in</h2>
+      <label>Username
+        <input type="text" name="username" autocomplete="username" required minlength="3" maxlength="64"
+               placeholder="your username">
+      </label>
+      <label>Password
+        <input type="password" name="password" autocomplete="current-password" required minlength="8" maxlength="128"
+               placeholder="site password">
+      </label>
+      <p class="hint">The site password is also the encryption key. Don't forget it: without it, the entries cannot be decrypted.</p>
+      <button type="submit" class="btn primary">Sign in</button>
+      <p id="form-error" class="error" hidden></p>
+      <p id="form-status" class="muted" hidden></p>
+      <p class="muted">No account yet? <a href="register.php">Create one</a></p>
+    </form>
   </header>
 
   <section id="how-it-works">

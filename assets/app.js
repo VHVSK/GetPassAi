@@ -431,7 +431,7 @@ async function handleSaveEntry(e) {
 /* ---------- startup ---------- */
 document.addEventListener('DOMContentLoaded', () => {
   const page = document.body.dataset.page;
-  if (page === 'login') $('#login-form')?.addEventListener('submit', handleLogin);
+  if (page === 'login' || page === 'home') $('#login-form')?.addEventListener('submit', handleLogin);
   if (page === 'register') $('#register-form')?.addEventListener('submit', handleRegister);
   if (page === 'vault') initVault();
 });

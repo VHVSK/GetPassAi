@@ -77,7 +77,7 @@ Honest limitations (important to understand):
 ## Files
 
 ```
-index.php            — home: landing page for guests; signed-in users go to the vault
+index.php            — home: landing page with a sign-in form for guests; signed-in users go to the vault
 login.php            — sign-in page
 register.php         — registration page
 logout.php           — sign-out
