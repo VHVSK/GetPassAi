@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /vault.php
+Disallow: /api.php
+Disallow: /logout.php
+Disallow: /config.php
+
+Sitemap: https://getpassai.com/sitemap.xml

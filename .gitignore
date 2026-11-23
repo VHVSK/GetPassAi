@@ -1,0 +1,8 @@
+# Secrets and local settings — never commit.
+.vscode/*
+config.php
+
+# OS and editor junk.
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,19 @@
+<?php
+// Example settings for the password vault.
+// Copy this file to config.php and fill in your details:
+//   cp config.php.example config.php
+// Do NOT put config.php in public repositories and do not send it to anyone:
+// it contains the database password.
+return [
+    // MySQL connection (standard hosting).
+    'DB_HOST' => 'localhost',
+    'DB_NAME' => 'password_vault',
+    'DB_USER' => 'vault_user',
+    'DB_PASS' => 'CHANGE_THE_DATABASE_PASSWORD',
+
+    // Whether new users may register.
+    // true — anyone can register.
+    // After everyone has registered, set it to false so no stranger
+    // can create an account on your site.
+    'ALLOW_REGISTRATION' => true,
+];
