@@ -36,8 +36,8 @@ const DONATE_URL = 'https://donatello.to/ViktorVyhivskyi';
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
-// No inline scripts or styles anywhere (only assets/app.js + assets/style.css),
-// no external resources: a strict CSP is safe.
+// No inline scripts or styles anywhere (only assets/app.js, assets/srp.js
+// + assets/style.css), no external resources: a strict CSP is safe.
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
 if ($isHttps) {
@@ -141,8 +141,9 @@ function page_head(string $title, string $page, string $extraHead = ''): void
         . '<body data-page="' . h($page) . '">' . "\n";
 }
 
-/** End of an HTML page. */
+/** End of an HTML page. srp.js (SRP-6a client) loads before app.js. */
 function page_foot(): void
 {
-    echo '<script src="assets/app.js"></script>' . "\n" . '</body></html>' . "\n";
+    echo '<script src="assets/srp.js"></script>' . "\n"
+        . '<script src="assets/app.js"></script>' . "\n" . '</body></html>' . "\n";
 }

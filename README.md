@@ -30,8 +30,8 @@ The password travels only inside the device: browser → clipboard → app.
 - **Security plan.** Full improvement + audit plan:
   `security-plan-2026-11-21.md` (not part of the deployed site).
   Verdict: no critical vulnerabilities found in the code; the main
-  risks are architectural — the server sees the site password at
-  sign-in (SRP is phase 3) and there is no account recovery yet
+  risks are architectural — SRP sign-in is done (phase 3, the server
+  never sees the site password), and there is no account recovery yet
   (phase 4).
 
 ## How it is safe (threat model)

@@ -10,8 +10,8 @@
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     username VARCHAR(64) NOT NULL COMMENT 'Username (may be an e-mail)',
-    password_hash VARCHAR(255) NOT NULL COMMENT 'Site password hash (Argon2id or bcrypt)',
-    kdf_salt VARCHAR(64) NOT NULL COMMENT 'PBKDF2 salt for the encryption key (base64). Not secret.',
+    srp_salt VARCHAR(64) NOT NULL COMMENT 'SRP salt (hex, 16 bytes). Also the PBKDF2 salt for the encryption key. Not secret.',
+    srp_verifier TEXT NOT NULL COMMENT 'SRP verifier v = g^x % N (hex, 2048-bit). The server never sees the site password.',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_username (username)

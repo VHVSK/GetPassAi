@@ -2,10 +2,15 @@
 /* Password Vault — client-side logic (encryption only in the browser).
  *
  * How it works:
+ *  - Sign-in uses SRP-6a (see srp.js / srp.php): the site password never
+ *    leaves the browser. The browser proves it knows the password (M1),
+ *    the server proves itself back (M2). Registration sends only a salt
+ *    and a verifier — no password, no password hash.
  *  - Site password -> encryption key (PBKDF2-SHA256, 600,000 iterations,
- *    the user's kdf_salt). The key lives ONLY in the sessionStorage of the
- *    current tab: close the tab and the key is gone — you have to sign in
- *    again (the browser will fill in the username and password).
+ *    the SRP salt — the same salt the server returns with the challenge).
+ *    The key lives ONLY in the sessionStorage of the current tab: close
+ *    the tab and the key is gone — you have to sign in again (the browser
+ *    will fill in the username and password).
  *  - Every entry is encrypted separately: AES-256-GCM, random salt (16 bytes,
  *    used as additional data / AAD) and IV (12 bytes). The server stores only
  *    ciphertext + salt + IV in base64 — it never sees service names or passwords.
@@ -45,15 +50,22 @@ function randomBytes(n) {
   crypto.getRandomValues(a);
   return a;
 }
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
 
 /* ---------- cryptography ---------- */
-async function deriveMasterKey(password, kdfSaltB64) {
+/* The salt is the SRP salt (hex, 16 bytes) — the same salt the server
+ * returns with the challenge. It is public, not secret. */
+async function deriveMasterKey(password, saltHex) {
   const baseKey = await crypto.subtle.importKey('raw', te.encode(password), 'PBKDF2', false, ['deriveKey']);
   // extractable: true — the raw key bytes must be saved to sessionStorage
   // before moving to vault.php. Key bytes are not the password; without the site password
   // a new key cannot be derived, and sessionStorage lives only in the tab.
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: b64decode(kdfSaltB64), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: hexToBytes(saltHex), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     baseKey,
     { name: 'AES-GCM', length: 256 },
     true,
@@ -148,7 +160,11 @@ async function copyText(text) {
   scheduleClipboardClear();
 }
 
-/* ---------- sign-in page ---------- */
+/* ---------- sign-in page (SRP-6a) ----------
+ * The site password never leaves the browser: the challenge returns a salt
+ * and B, the browser proves the password with M1, the server answers M2.
+ * The master key is derived from the same salt — but it is stored in
+ * sessionStorage only after M2 checks out. */
 async function handleLogin(e) {
   e.preventDefault();
   const form = e.target;
@@ -159,13 +175,19 @@ async function handleLogin(e) {
   btn.disabled = true;
   try {
     if (!window.crypto?.subtle) throw new Error('This browser does not support WebCrypto. HTTPS or localhost is required.');
+    if (typeof SrpClient === 'undefined') throw new Error('SRP client failed to load. Please refresh the page.');
+    showStatus('Contacting the server…');
+    const { salt, B } = await api('srp_challenge', { method: 'POST', body: { username, csrf_token: csrfToken() } });
     showStatus('Deriving the encryption key… (this takes a few seconds)');
-    const { salt } = await fetch('api.php?action=salt&username=' + encodeURIComponent(username))
-      .then((r) => r.json());
     const masterKey = await deriveMasterKey(password, salt);
     const raw = await crypto.subtle.exportKey('raw', masterKey);
+    const client = new SrpClient(username, password, salt);
+    const A = await client.step1();
+    await client.setChallenge(B);
+    const M1 = await client.computeM1();
     showStatus('Checking username and password…');
-    await api('login', { method: 'POST', body: { username, password, csrf_token: csrfToken() } });
+    const { M2 } = await api('srp_verify', { method: 'POST', body: { A, M1, csrf_token: csrfToken() } });
+    if (!await client.verifyM2(M2)) throw new Error('The server could not prove itself. Please try again.');
     // The key lives only in the sessionStorage of the current tab.
     sessionStorage.setItem(KEY_STORAGE, b64encode(new Uint8Array(raw)));
     location.href = 'vault.php';
@@ -176,7 +198,9 @@ async function handleLogin(e) {
   }
 }
 
-/* ---------- registration page ---------- */
+/* ---------- registration page (SRP-6a) ----------
+ * The browser generates a salt and a verifier from the password and sends
+ * only those two values. The password itself never leaves the browser. */
 async function handleRegister(e) {
   e.preventDefault();
   const form = e.target;
@@ -190,10 +214,13 @@ async function handleRegister(e) {
   btn.disabled = true;
   try {
     if (!window.crypto?.subtle) throw new Error('This browser does not support WebCrypto. HTTPS or localhost is required.');
-    const kdfSalt = b64encode(randomBytes(16));
-    await api('register', {
+    if (typeof SrpClient === 'undefined') throw new Error('SRP client failed to load. Please refresh the page.');
+    const salt = SrpClient.randomSaltHex();
+    const client = new SrpClient(username, password, salt);
+    const verifier = await client.computeVerifier();
+    await api('srp_register', {
       method: 'POST',
-      body: { username, password, kdf_salt: kdfSalt, csrf_token: csrfToken() },
+      body: { username, salt, verifier, csrf_token: csrfToken() },
     });
     location.href = 'login.php?registered=1';
   } catch (err) {

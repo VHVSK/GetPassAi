@@ -1,20 +1,24 @@
 <?php
 // JSON API of the password vault.
 // Actions (?action= parameter):
-//   GET  salt     — PBKDF2 salt for the user (public, not secret)
-//   GET  csrf     — CSRF token of the current session
-//   POST register — sign up {username, password, kdf_salt, csrf_token}
-//   POST login    — sign in {username, password, csrf_token}
-//   POST logout   — sign out {csrf_token}
-//   GET  list     — list of encrypted entries (sign-in required)
-//   POST save     — create/update an entry {id?, salt, iv, data, csrf_token}
-//   POST delete   — delete an entry {id, csrf_token}
+//   GET  csrf          — CSRF token of the current session
+//   POST srp_register  — sign up {username, salt, verifier, csrf_token}
+//                        (salt = SRP salt hex, verifier = SRP verifier hex;
+//                        the site password NEVER reaches the server)
+//   POST srp_challenge — start sign-in {username, csrf_token} -> {salt, B}
+//   POST srp_verify    — finish sign-in {A, M1, csrf_token} -> {M2, username}
+//   POST logout        — sign out {csrf_token}
+//   GET  list          — list of encrypted entries (sign-in required)
+//   POST save          — create/update an entry {id?, salt, iv, data, csrf_token}
+//   POST delete        — delete an entry {id, csrf_token}
 //
 // The server NEVER receives plain-text service names or passwords:
-// save only gets ciphertext (data) + salt + IV in base64.
+// save only gets ciphertext (data) + salt + IV in base64, and SRP proves
+// the site password without sending it (see srp.php).
 
 declare(strict_types=1);
 require __DIR__ . '/common.php';
+require __DIR__ . '/srp.php';
 
 $action = $_GET['action'] ?? '';
 $input = [];
@@ -28,12 +32,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 function valid_username(string $u): bool
 {
     return (bool) preg_match('/^[A-Za-z0-9._@-]{3,64}$/', $u);
-}
-
-function valid_password(string $p): bool
-{
-    $len = mb_strlen($p, 'UTF-8');
-    return $len >= 8 && $len <= 128;
 }
 
 /** Validate a base64 string (and its byte length after decoding). */
@@ -73,78 +71,110 @@ function clear_failed_logins(string $ip, string $username): void
 
 try {
     switch ($action) {
-    // --- PBKDF2 salt for the user. Not secret.
-    // If there is no such user, return a random salt, so as not to reveal
-    // whether the username exists.
-    case 'salt': {
-        $username = (string) ($_GET['username'] ?? '');
-        $salt = null;
-        if (valid_username($username)) {
-            $stmt = db()->prepare('SELECT kdf_salt FROM users WHERE username = :u LIMIT 1');
-            $stmt->execute([':u' => $username]);
-            $row = $stmt->fetch();
-            if ($row) {
-                $salt = (string) $row['kdf_salt'];
-            }
-        }
-        if ($salt === null) {
-            $salt = base64_encode(random_bytes(16));
-        }
-        json_response(['ok' => true, 'salt' => $salt]);
-    }
-
     case 'csrf': {
         json_response(['ok' => true, 'csrf_token' => (string) ($_SESSION['csrf_token'] ?? '')]);
     }
 
-    // --- Registration.
-    case 'register': {
+    // --- Registration (SRP): the browser sends salt + verifier.
+    // The site password never reaches the server.
+    case 'srp_register': {
         check_csrf($input['csrf_token'] ?? null);
         if (empty($GLOBALS['config']['ALLOW_REGISTRATION'])) {
             json_response(['ok' => false, 'error' => 'Registration is turned off.'], 403);
         }
         $username = (string) ($input['username'] ?? '');
-        $password = (string) ($input['password'] ?? '');
-        $kdfSalt = (string) ($input['kdf_salt'] ?? '');
+        $salt = srp_clean_hex($input['salt'] ?? null, 32);
+        $verifier = srp_clean_hex($input['verifier'] ?? null, 512);
         if (!valid_username($username)) {
             json_response(['ok' => false, 'error' => 'Username: 3–64 characters (Latin letters, digits, . _ @ -).'], 400);
         }
-        if (!valid_password($password)) {
-            json_response(['ok' => false, 'error' => 'Password: 8 to 128 characters.'], 400);
+        if ($salt === null || strlen($salt) !== 32 || $verifier === null || strlen($verifier) !== 512) {
+            json_response(['ok' => false, 'error' => 'Invalid SRP registration data.'], 400);
         }
-        if (!valid_b64($kdfSalt, 64, 32)) {
-            json_response(['ok' => false, 'error' => 'Invalid key salt.'], 400);
+        $p = srp_params('sha256');
+        $v = srp_bn_from_hex($verifier);
+        $N = srp_bn_from_hex($p['N']);
+        if (srp_bn_is_zero($v) || srp_bn_cmp($v, $N) >= 0) {
+            json_response(['ok' => false, 'error' => 'Invalid SRP registration data.'], 400);
         }
         $stmt = db()->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
         $stmt->execute([':u' => $username]);
         if ($stmt->fetch()) {
             json_response(['ok' => false, 'error' => 'This username is already taken.'], 409);
         }
-        $algo = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_BCRYPT;
-        $hash = password_hash($password, $algo);
         $stmt = db()->prepare(
-            'INSERT INTO users (username, password_hash, kdf_salt) VALUES (:u, :h, :s)'
+            'INSERT INTO users (username, srp_salt, srp_verifier) VALUES (:u, :s, :v)'
         );
-        $stmt->execute([':u' => $username, ':h' => $hash, ':s' => $kdfSalt]);
+        $stmt->execute([':u' => $username, ':s' => $salt, ':v' => $verifier]);
         json_response(['ok' => true], 201);
     }
 
-    // --- Sign-in.
-    case 'login': {
+    // --- Sign-in, step 1: issue salt + B. For an unknown username the
+    // response is indistinguishable (random salt + random verifier),
+    // so the endpoint does not reveal whether the user exists.
+    case 'srp_challenge': {
         check_csrf($input['csrf_token'] ?? null);
         $username = (string) ($input['username'] ?? '');
-        $password = (string) ($input['password'] ?? '');
         $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
-        if (!valid_username($username) || !valid_password($password)) {
+        if (!valid_username($username)) {
             json_response(['ok' => false, 'error' => 'Wrong username or password.'], 400);
         }
         if (too_many_attempts($ip, $username)) {
             json_response(['ok' => false, 'error' => 'Too many failed attempts. Please try again in 15 minutes.'], 429);
         }
-        $stmt = db()->prepare('SELECT id, username, password_hash FROM users WHERE username = :u LIMIT 1');
+        $stmt = db()->prepare('SELECT srp_salt, srp_verifier FROM users WHERE username = :u LIMIT 1');
         $stmt->execute([':u' => $username]);
         $row = $stmt->fetch();
-        if (!$row || !password_verify($password, (string) $row['password_hash'])) {
+        if ($row) {
+            $salt = (string) $row['srp_salt'];
+            $verifier = (string) $row['srp_verifier'];
+        } else {
+            // Unknown user: random values, same shape of response.
+            $salt = bin2hex(random_bytes(16));
+            $x = srp_bn_from_bytes(random_bytes(32));
+            $verifier = srp_compute_verifier(srp_bn_to_hex($x), srp_params('sha256'));
+        }
+        $p = srp_params('sha256');
+        $server = new SrpServer($p);
+        $b = srp_random_private();
+        $server->setPrivateB($b);
+        $B = $server->challenge($username, $salt, $verifier);
+        // One-shot state: the private b is needed to finish the handshake.
+        $_SESSION['srp'] = ['username' => $username, 'salt' => $salt, 'verifier' => $verifier, 'b' => $b];
+        json_response(['ok' => true, 'salt' => $salt, 'B' => $B]);
+    }
+
+    // --- Sign-in, step 2: verify the client proof M1, answer with M2.
+    case 'srp_verify': {
+        check_csrf($input['csrf_token'] ?? null);
+        $state = $_SESSION['srp'] ?? null;
+        unset($_SESSION['srp']); // one-shot: a proof cannot be replayed
+        $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+        if (!is_array($state) || empty($state['username']) || empty($state['salt'])
+            || empty($state['verifier']) || empty($state['b'])) {
+            json_response(['ok' => false, 'error' => 'Sign-in session expired. Please try again.'], 401);
+        }
+        $username = (string) $state['username'];
+        $A = srp_clean_hex($input['A'] ?? null, 512);
+        $M1 = srp_clean_hex($input['M1'] ?? null, 64);
+        if ($A === null || $M1 === null) {
+            record_failed_login($ip, $username);
+            json_response(['ok' => false, 'error' => 'Wrong username or password.'], 401);
+        }
+        $stmt = db()->prepare('SELECT id, username FROM users WHERE username = :u LIMIT 1');
+        $stmt->execute([':u' => $username]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            record_failed_login($ip, $username);
+            json_response(['ok' => false, 'error' => 'Wrong username or password.'], 401);
+        }
+        $p = srp_params('sha256');
+        $server = new SrpServer($p);
+        try {
+            $server->setPrivateB((string) $state['b']);
+            $server->challenge($username, (string) $state['salt'], (string) $state['verifier']);
+            $M2 = $server->verify($A, $M1);
+        } catch (Throwable $e) {
             record_failed_login($ip, $username);
             json_response(['ok' => false, 'error' => 'Wrong username or password.'], 401);
         }
@@ -152,7 +182,7 @@ try {
         $_SESSION['user_id'] = (int) $row['id'];
         $_SESSION['username'] = (string) $row['username'];
         clear_failed_logins($ip, $username);
-        json_response(['ok' => true, 'username' => (string) $row['username']]);
+        json_response(['ok' => true, 'username' => (string) $row['username'], 'M2' => $M2]);
     }
 
     // --- Sign-out.

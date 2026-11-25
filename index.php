@@ -91,7 +91,7 @@ page_head('GetPassAi — Free password vault your AI assistant can use without s
       <li>No email anywhere: registration and entries need no email, and pseudonyms are allowed.</li>
       <li>Open source (AGPLv3) — anyone can read the code and check it.</li>
     </ul>
-    <p class="hint">Honest limits: the site password passes through the server at sign-in (checked as a hash, never stored in plain text), there is no account recovery yet if you forget it, and the code has not been independently audited.</p>
+    <p class="hint">Honest limits: there is no account recovery yet if you forget your site password, and the code has not been independently audited.</p>
   </section>
 
   <section id="free">
@@ -109,7 +109,7 @@ page_head('GetPassAi — Free password vault your AI assistant can use without s
       <h3>Has it been audited?</h3>
       <p>Not yet — there has been no independent security audit. The code is open source, so anyone can read and check it: <a href="https://github.com/VHVSK/GetPassAi">github.com/VHVSK/GetPassAi</a>.</p>
       <h3>Does the server see my passwords?</h3>
-      <p>No. Service passwords are encrypted in your browser before they are sent; the server only stores ciphertext. The site password itself passes through the server at sign-in (checked as a hash, never stored in plain text) — a full zero-knowledge login (SRP) is planned.</p>
+      <p>No. Service passwords are encrypted in your browser before they are sent; the server only stores ciphertext. The site password itself never leaves your browser either: sign-in uses SRP, a zero-knowledge proof — the server only stores a verifier it cannot use to sign in as you.</p>
       <h3>Do I need an email?</h3>
       <p>No. Registration needs no email, entries need no email, and you may use a pseudonym.</p>
       <h3>How is it different from other similar services?</h3>
