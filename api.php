@@ -170,6 +170,7 @@ try {
         }
         $p = srp_params('sha256');
         $server = new SrpServer($p);
+        $M2 = ''; // assigned inside try; the catch answers 401 and exits
         try {
             $server->setPrivateB((string) $state['b']);
             $server->challenge($username, (string) $state['salt'], (string) $state['verifier']);

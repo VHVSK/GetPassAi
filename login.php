@@ -16,7 +16,7 @@ $needLogin = isset($_GET['need_login']);
 page_head('Sign in', 'login');
 ?>
 <main class="wrap">
-  <h1>🔐 GetPassAi</h1>
+  <h1><a href="index.php">🔐 GetPassAi</a></h1>
   <p class="muted">Free vault. Passwords are encrypted in your browser — the server never sees them.</p>
 
   <?php if ($registered): ?>

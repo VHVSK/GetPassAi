@@ -13,7 +13,7 @@ $allowed = !empty($config['ALLOW_REGISTRATION']);
 page_head('Create account', 'register');
 ?>
 <main class="wrap">
-  <h1>🔐 GetPassAi</h1>
+  <h1><a href="index.php">🔐 GetPassAi</a></h1>
 
   <?php if (!$allowed): ?>
     <p class="warn">Registration has been turned off by the site owner.</p>

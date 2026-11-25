@@ -264,7 +264,8 @@ function bindVaultUI() {
   $('#generate-btn').addEventListener('click', () => {
     const field = $('#entry-password');
     field.value = generatePassword(16);
-    field.type = 'text'; // show the generated password (a human fills in this form)
+    // The field stays type="password": the generated password is shown
+    // as dots, never in plain text on screen.
   });
   $('#logout-btn').addEventListener('click', handleLogout);
   $('#clear-clipboard-btn').addEventListener('click', async () => {
